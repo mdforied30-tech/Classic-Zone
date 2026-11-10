@@ -68,3 +68,5 @@ footer .adm{display:block;margin-top:26px;font-size:9px;color:#ffffff22;text-dec
 .login{max-width:380px;margin:12vh auto;background:#fff;padding:26px;border-radius:24px;box-shadow:0 20px 50px #15122b22}
 .err{color:var(--bad);font-weight:600;margin-top:8px}.note{background:#fff7dd;padding:8px 12px;border-radius:10px;font-size:.85rem}
 .ck{display:inline-flex;gap:6px;align-items:center;margin-right:12px}
+.desc{color:var(--mut);margin:8px 0 14px;white-space:pre-line;line-height:1.75}
+.pay hr{border:0;border-top:1px dashed #e0c36a;margin:8px 0}
