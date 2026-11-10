@@ -14,9 +14,10 @@ function loginView(msg = '') {
   };
 }
 function shell() {
-  A.innerHTML = `<div class="ad"><div style="display:flex;justify-content:space-between;align-items:center"><div class="logo">Classic <b>Zone</b> Panel ${S.live ? '🟢 Live' : '🟡 Demo'}</div><button class="sb d" id="lo">Logout</button></div>
+  A.innerHTML = `<div class="ad"><div style="display:flex;justify-content:space-between;align-items:center"><div class="logo">Classic <b>Zone</b> Panel ${S.live ? '🟢 Live' : '🟡 Demo'}</div><span><button class="sb" id="nt">🔔 অ্যালার্ট</button> <button class="sb d" id="lo">Logout</button></span></div>
   <div class="tabs">${[['products', 'Products'], ['orders', 'Orders'], ['cats', 'Categories'], ['settings', 'Settings']].map(([k, v]) => `<button data-t="${k}" class="${tab === k ? 'on' : ''}">${v}${k === 'orders' ? ` (${orders.filter(o => o.status === 'New').length})` : ''}</button>`).join('')}</div><div id="body"></div></div>`;
   $('lo').onclick = () => S.logout();
+  $('nt').onclick = async () => { beep(); try { if (window.Notification && Notification.permission === 'default') await Notification.requestPermission(); } catch {} toast('অ্যালার্ট চালু আছে 🔔 (প্যানেল খোলা থাকলে নতুন অর্ডারে শব্দ হবে)'); };
   document.querySelectorAll('[data-t]').forEach(b => b.onclick = () => { tab = b.dataset.t; edit = null; render(); });
   render();
 }
@@ -53,7 +54,7 @@ function render() {
   }
   if (tab === 'orders') {
     B.innerHTML = `<div class="pnl"><div style="display:flex;justify-content:space-between"><h3>Orders (${orders.length})</h3><button class="sb d" id="da">Delete all</button></div>
-    ${orders.map(o => `<div class="row"><div class="g"><b>${esc(o.oid)}</b> • ${esc(o.name)} • <a href="tel:${esc(o.phone)}">${esc(o.phone)}</a><br><small>${esc(o.address)} (${o.zone === 'dhaka' ? 'Dhaka' : 'Outside'})<br>${(o.items || []).map(esc).join('<br>')}<br>Total: <b>${tk(o.total)}</b> • via ${esc(o.via)} ${o.trx ? '• TrxID ' + esc(o.trx) : ''} • ${new Date(o.createdAt).toLocaleString()}</small></div>
+    ${orders.map(o => `<div class="row"><div class="g"><b>${esc(o.oid)}</b> • ${esc(o.name)} • <a href="tel:${esc(o.phone)}">${esc(o.phone)}</a><br><small>${esc(o.address)} (${o.zone === 'dhaka' ? 'Dhaka' : 'Outside'})<br>${(o.items || []).map(esc).join('<br>')}<br>Total: <b>${tk(o.total)}</b> • ${o.pay === 'Advance' ? '💳 অগ্রিম' : '💵 ক্যাশ অন ডেলিভারি'} ${o.trx ? '• TrxID ' + esc(o.trx) : ''} • ${new Date(o.createdAt).toLocaleString()}</small></div>
     <select class="f" style="width:auto" data-s="${esc(o.id)}">${['New', 'Confirmed', 'Delivered', 'Cancelled'].map(s => `<option ${s === o.status ? 'selected' : ''}>${s}</option>`).join('')}</select><button class="sb d" data-d="${esc(o.id)}">Delete</button></div>`).join('') || '<p>Kono order nei.</p>'}</div>`;
     $('da').onclick = async () => { if (confirm('Sob order delete hobe. Nishchit?')) for (const x of orders) await S.del('orders', x.id); };
     B.querySelectorAll('[data-s]').forEach(s => s.onchange = () => S.save('orders', { id: s.dataset.s, status: s.value }));
@@ -82,11 +83,24 @@ function shrink(file) {
     const k = Math.min(1, 700 / Math.max(i.width, i.height)), c = document.createElement('canvas'); c.width = i.width * k; c.height = i.height * k;
     c.getContext('2d').drawImage(i, 0, 0, c.width, c.height); res(c.toDataURL('image/jpeg', .72)); }; i.src = r.result; }; r.readAsDataURL(file); });
 }
+let ac;
+const beep = () => { try { ac = ac || new (window.AudioContext || window.webkitAudioContext)(); [880, 1175, 880].forEach((f, i) => { const o = ac.createOscillator(), g = ac.createGain(); o.connect(g); g.connect(ac.destination); o.frequency.value = f; g.gain.value = .25; o.start(ac.currentTime + i * .2); o.stop(ac.currentTime + i * .2 + .15); }); } catch {} };
+const toast = m => { const t = document.createElement('div'); t.className = 'toast'; t.textContent = m; t.style.cursor = 'pointer'; t.onclick = () => { tab = 'orders'; edit = null; render(); t.remove(); }; document.body.append(t); setTimeout(() => t.remove(), 9000); };
+const notify = o => { beep(); toast(`🔔 নতুন অর্ডার ${o.oid}: ${o.name} — ${tk(o.total)}`); if (document.hidden) document.title = '🔔 নতুন অর্ডার!';
+  try { if (window.Notification && Notification.permission === 'granted') new Notification('নতুন অর্ডার ' + o.oid, { body: `${o.name} — ${tk(o.total)}` }); } catch {} };
+document.addEventListener('visibilitychange', () => { if (!document.hidden) document.title = 'Panel'; });
+let known = null;
 let started = false;
 S.onAuth(ok => {
-  if (!ok) { started = false; return loginView(); }
+  if (!ok) { if (started) return location.reload(); return loginView(); }
   if (started) return; started = true; shell();
   S.watch('products', l => { products = l.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)); if (!edit) render(); });
-  S.watch('orders', l => { orders = l.sort((a, b) => b.createdAt - a.createdAt); if (tab === 'orders') render(); const t = document.querySelector('[data-t=orders]'); if (t) t.textContent = `Orders (${orders.filter(o => o.status === 'New').length})`; });
+  S.watch('orders', l => {
+    orders = l.sort((a, b) => b.createdAt - a.createdAt);
+    const fresh = known ? orders.filter(o => !known.has(o.id) && o.status === 'New') : [], pend = orders.filter(o => o.status === 'New').length;
+    if (!known && pend) setTimeout(() => toast(`🔔 ${pend} টি নতুন অর্ডার অপেক্ষায় আছে`), 600);
+    known = new Set(orders.map(o => o.id)); fresh.forEach(notify);
+    if (tab === 'orders') render(); const t = document.querySelector('[data-t=orders]'); if (t) t.textContent = `Orders (${pend})`;
+  });
   S.watchSettings(s => { cfg = s; if (tab !== 'settings' && !edit) render(); });
 });
